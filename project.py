@@ -86,6 +86,38 @@ def delete_habit():
     
     db.close()
 
+def calculate_streak(habit_id):
+    db = sqlite3.connect(DB)
+    today = date.today()
+    streak = 0
+
+    current_day = today
+
+    # While the row in database isnt empty, add to streak
+    while True:
+        day = current_day.isoformat()
+        row = db.execute(
+            # Will return true/false if a row is found
+            "SELECT 1 FROM logs WHERE habit_id = ? AND day = ?"
+            (habit_id, day)
+        ).fetchone()
+
+        if row:
+            streak += 1
+            # Go back a day
+            current_day -= timedelta(days=1)
+        else:
+            break
+    
+    db.close()
+    return streak
+
+
+
+
+
+
+
 
 
     
