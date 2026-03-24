@@ -112,7 +112,75 @@ def calculate_streak(habit_id):
     db.close()
     return streak
 
+def log_today():
+    #Get all habits, allow dictionary-like access
+    db = sqlite3.connect(DB)
+    db.row_factory = sqlite3.Row
+    habits = db.execute("SELECT * FROM habits ORDER BY id").fetchall()
+    
+    # return if no habits yet
+    if not habits:
+        print("\nNo habits yet. Add with:  python habits.py add <habits name>")
+        db.close() 
+        return
 
+    today = date.todat().isoformat()   
+    print(f"\nHey there! Today is {date.todat().strftime('%A, %B, %d, %Y')}")
+
+    #show each habit with its streak
+    print("Your habits: ")
+    for i, h in enumerate(habits, 1):
+        streak = calculate_streak(h["id"])
+        display = ""
+        if streak > 0:
+            display = f"🔥 {streak} day streak" 
+        else:
+            display = "❌ no streak"
+        print(f"{i}. {h['name']:<30} {display}")
+
+    # Let user say which ones to check off
+    print("What did you completet today?")
+    print("Enter numbers seperated by spaces, or 0 for none: ", end="")
+
+    # Try user data
+    nums = input().strip()
+
+    if nums == "0" or nums == "":
+        completed = []
+    else:
+        #try to seperate on spaces
+        try:
+            completed = [int(x) for x in nums.split()]
+        except ValueError:
+            print("Invalid input please enter numbers seperated by spaces only")
+            db.close()
+            return
+    
+    #make sure numbers are in range
+    for num in nums:
+        if num < 1 or num > len(habits):
+            print(f"{num} is not a valid habit number.")
+            db.close()
+            return
+    
+    #save to database, ignoring if already logged
+    for num in completed:
+        habit = habits[num - 1]
+        db.execute("INSERT OR IGNORE INTO logs (habit_id, day) VALUES (?, ?)", 
+        (habit["id"], today))
+
+    db.commit()
+
+    #show updates
+    print(f"\nSuccessfully logged. {len(completed)}/{len(habits)} completed today.")
+
+    for num in completed:
+        habit = habits[num - 1]
+        streak = calculate_streak(habit["id"])
+        print(f"{habit['name']}: 🔥 {streak} day streak")
+        
+    print()
+    db.close()        
 
 
 
