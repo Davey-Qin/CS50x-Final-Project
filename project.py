@@ -17,7 +17,7 @@ def setup_database():
             habit_id INTEGER,
             day TEXT,
             PRIMARY KEY (habit_id, day),
-            FOREIGN KEY(habit_id) REFERNCES habits(id)
+            FOREIGN KEY(habit_id) REFERENCES habits(id)
         );
                      
         
@@ -34,7 +34,7 @@ def add_habit(name):
         db.commit()
         print(f"Added {name} as a habit")
     except sqlite3.IntegrityError:
-        printf(f"You already have a habit called '{name}'")
+        print(f"You already have a habit called '{name}'")
     db.close()
 
 def delete_habit():
@@ -73,14 +73,14 @@ def delete_habit():
     
     selected = habits[choice - 1]
 
-    print(f"Delete '{selected}' as a habit?", end="")
+    print(f"Delete '{selected['name']}' as a habit? (y/n) ", end="")
     confirm = input().strip().lower()
 
     if confirm == "y":
         db.execute("DELETE FROM logs WHERE habit_id = ?", (selected["id"],))
         db.execute("DELETE FROM habits WHERE id = ?", (selected["id"],))
         db.commit()
-        print(f"Deleted '{selected["name"]}' as a habit.")
+        print(f"Deleted '{selected['name']}' as a habit.")
     else:
         print("Cancelled.")
     
@@ -98,7 +98,7 @@ def calculate_streak(habit_id):
         day = current_day.isoformat()
         row = db.execute(
             # Will return true/false if a row is found
-            "SELECT 1 FROM logs WHERE habit_id = ? AND day = ?"
+            "SELECT 1 FROM logs WHERE habit_id = ? AND day = ?",
             (habit_id, day)
         ).fetchone()
 
@@ -124,8 +124,8 @@ def log_today():
         db.close() 
         return
 
-    today = date.todat().isoformat()   
-    print(f"\nHey there! Today is {date.todat().strftime('%A, %B, %d, %Y')}")
+    today = date.today().isoformat()   
+    print(f"\nHey there! Today is {date.today().strftime('%A, %B, %d, %Y')}")
 
     #show each habit with its streak
     print("Your habits: ")
@@ -157,7 +157,7 @@ def log_today():
             return
     
     #make sure numbers are in range
-    for num in nums:
+    for num in completed:
         if num < 1 or num > len(habits):
             print(f"{num} is not a valid habit number.")
             db.close()
@@ -180,7 +180,131 @@ def log_today():
         print(f"{habit['name']}: 🔥 {streak} day streak")
         
     print()
-    db.close()        
+    db.close()      
+
+
+# Show stats based of either "all" or given number of days
+def show_stats(days):
+    #Same procedure, make data dict-like accessible, check if empty
+    db = sqlite3.connect(DB)
+    db.row_factory = sqlite3.Row
+    habits = db.execute("SELECT * FROM habits ORDER BY id").fetchall()
+
+    if not habits:
+        print("\nNo habits yet. Add one with: python habits.py add <habit>")
+        db.close()
+        return
+    
+    today = date.today()
+
+    # If print all days, find range to look at
+    if days == "all":
+        earliest = db.execute("SELECT MIN(day) FROM logs").fetchone()[0]
+        if earliest is None:
+            print("No logs yet, start logging with python habits.py")
+            db.close()
+            return
+        start_date = date.fromisoformat(earliest)
+        period_label = "All time"
+    else:
+        start_date = today - timedelta(days=days - 1)
+        period_label = f"Last {days} days"
+
+    #calculate total days in that range
+    total_days = (today - start_date).days + 1
+
+    print(f"\nHabit stats - {period_label}: {start_date} to {today}")
+    print(f"  {'Habit':<30} {'Completed':<12} {'Rate':<8} {'Best Streak'}")
+    print(f"  {'-'*30} {'-'*12} {'-'*8} {'-'*11}")
+        
+    # get stats on each habit
+    for habit in habits:
+        #count how many days this was logged in total range
+        completed_count = db.execute("""
+            SELECT COUNT(*) FROM logs WHERE habit_id = ?
+                AND day >= ? AND day <= ?
+            """, (habit["id"], start_date.isoformat(), today.isoformat())).fetchone()[0]
+        
+        #percentage logged
+        rate = int(completed_count / total_days * 100)
+
+        #calculate best streak for this habit
+        all_days = db.execute(
+            "SELECT day FROM logs WHERE habit_id = ? ORDER BY day", (habit["id"],)
+        ).fetchall()
+
+        best_streak = 0
+        current_streak = 0
+        prev_day = None
+
+        for row in all_days:
+            this_day = date.fromisoformat(row["day"])
+            if prev_day is None:
+                current_streak = 1
+            elif (this_day - prev_day).days == 1:
+                # continue streak
+                current_streak += 1
+            else:
+                #gap found, reset streak
+                current_streak = 1
+            best_streak = max(best_streak, current_streak)
+            prev_day = this_day
+    
+        print(f"{habit['name']:<30} {completed_count}/{total_days:<10} {rate}%{'':<5} {best_streak} days")
+    db.close()
+
+def main():
+    #need argparser
+    parser = argparse.ArgumentParser(
+        prog="habits",
+        description="A handy habit tracker"
+    )
+    # command options: add, delete, stats
+    #if none given, just print a log of habits
+    subparsers = parser.add_subparsers(dest="command")
+
+    #add command line optional arguments, with help
+    add_parser = subparsers.add_parser("add", help="Add a new habit")
+    add_parser.add_argument("name", type=str, help="The name of the habit")
+
+    subparsers.add_parser("delete", help="Delete a habit")
+
+    stats_parser = subparsers.add_parser("stats", help="View habit stats")
+    stats_parser.add_argument(
+        "--days",
+        default="7",
+        help="Number of days to show stats for: 7, 30, or all (defaultz: 7)"
+    )
+
+    args = parser.parse_args()
+
+    #make sure everything exists and is set up
+    setup_database()
+
+    if args.command == "add":
+        add_habit(args.name)
+    elif args.command == "delete":
+        delete_habit()
+    elif args.command == "stats":
+        if args.days == "all":
+            show_stats("all")
+        else:
+            #convert the string to integer
+            try:
+                show_stats(int(args.days))
+            except ValueError:
+                print("days must be a number or all. Example: --days 30")
+    else:
+        #no commands given
+        log_today()
+
+if __name__ == "__main__":
+    main()
+
+
+
+
+
 
 
 
