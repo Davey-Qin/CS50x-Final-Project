@@ -125,7 +125,7 @@ def log_today():
         return
 
     today = date.today().isoformat()   
-    print(f"\nHey there! Today is {date.today().strftime('%A, %B, %d, %Y')}")
+    print(f"\nHey there! Today is {date.today().strftime('%A, %B %d, %Y')}")
 
     #show each habit with its streak
     print("Your habits: ")
@@ -139,8 +139,8 @@ def log_today():
         print(f"{i}. {h['name']:<30} {display}")
 
     # Let user say which ones to check off
-    print("What did you completet today?")
-    print("Enter numbers seperated by spaces, or 0 for none: ", end="")
+    print("What did you complete today?")
+    print("Enter numbers seperated by spaces or 0 for none: ", end="")
 
     # Try user data
     nums = input().strip()
@@ -152,7 +152,7 @@ def log_today():
         try:
             completed = [int(x) for x in nums.split()]
         except ValueError:
-            print("Invalid input please enter numbers seperated by spaces only")
+            print("Invalid input, please enter numbers seperated by spaces only")
             db.close()
             return
     
